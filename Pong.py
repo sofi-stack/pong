@@ -3,11 +3,12 @@ import turtle
 
 WIDTH = 800
 HEIGHT = 600
-PADDLE_HEIGHT = 100
+PADDLE_HEIGHT = 110
 PADDLE_SPEED = 28
 WIN_SCORE = 5
-INITIAL_BALL_SPEED = 0.38
-MAX_BALL_SPEED = 2.0
+BALL_START_SPEED = 0.45
+MAX_BALL_SPEED = 4.5
+SPEED_INCREASE = 1.12
 
 wn = turtle.Screen()
 wn.title("Pong")
@@ -28,11 +29,11 @@ class Paddle:
 
     def move_up(self, amount=PADDLE_SPEED):
         y = self.t.ycor() + amount
-        self.t.sety(min(y, HEIGHT / 2 - 40))
+        self.t.sety(min(y, HEIGHT / 2 - 30))
 
     def move_down(self, amount=PADDLE_SPEED):
         y = self.t.ycor() - amount
-        self.t.sety(max(y, -(HEIGHT / 2 - 40)))
+        self.t.sety(max(y, -(HEIGHT / 2 - 30)))
 
     @property
     def xcor(self):
@@ -50,21 +51,29 @@ class Ball:
         self.t.shape("square")
         self.t.color("white")
         self.t.penup()
-        self.goto_center()
+        self.speed = BALL_START_SPEED
         self.dx = 0
         self.dy = 0
+        self.goto_center()
 
     def goto_center(self):
         self.t.goto(0, 0)
 
     def serve(self, direction):
         self.goto_center()
-        self.dx = direction * INITIAL_BALL_SPEED
-        self.dy = random.uniform(-INITIAL_BALL_SPEED, INITIAL_BALL_SPEED)
+        self.speed = BALL_START_SPEED
+        self.dx = direction * self.speed
+        self.dy = random.uniform(-0.55, 0.55)
 
     def move(self):
         self.t.setx(self.t.xcor() + self.dx)
         self.t.sety(self.t.ycor() + self.dy)
+
+    def bounce_off_paddle(self, paddle, direction):
+        self.speed = min(self.speed * SPEED_INCREASE, MAX_BALL_SPEED)
+        relative_hit = (self.ycor - paddle.ycor) / (PADDLE_HEIGHT / 2)
+        self.dy = relative_hit * 1.9
+        self.dx = direction * self.speed
 
     @property
     def xcor(self):
@@ -118,14 +127,6 @@ def show_status(message):
     status_pen.write(message, align="center", font=("Courier", 18, "normal"))
 
 
-def reset_round(direction):
-    global state
-    ball.serve(direction)
-    if state == "ready":
-        state = "playing"
-        status_pen.clear()
-
-
 def start_game():
     global state
     if state == "ready":
@@ -165,12 +166,6 @@ def end_game(winner):
     global state
     state = "game_over"
     show_status(f"{winner} wins! Press R to restart")
-
-
-def bounce_paddle(paddle, direction):
-    relative = (ball.ycor - paddle.ycor) / (PADDLE_HEIGHT / 2)
-    ball.dy = relative * 1.8
-    ball.dx = direction * min(abs(ball.dx) * 1.08, MAX_BALL_SPEED)
 
 
 def paddle_a_up():
@@ -215,7 +210,7 @@ def update_game():
         ball.sety(-(HEIGHT / 2 - 20))
         ball.dy *= -1
 
-    if ball.xcor > WIDTH / 2 + 20:
+    if ball.xcor > WIDTH / 2 + 25:
         score_a += 1
         draw_score()
         if score_a >= WIN_SCORE:
@@ -223,7 +218,7 @@ def update_game():
             return
         ball.serve(-1)
 
-    elif ball.xcor < -(WIDTH / 2 + 20):
+    elif ball.xcor < -(WIDTH / 2 + 25):
         score_b += 1
         draw_score()
         if score_b >= WIN_SCORE:
@@ -231,17 +226,34 @@ def update_game():
             return
         ball.serve(1)
 
-    if (ball.dx > 0) and (ball.xcor >= paddle_b.xcor - 20) and (ball.xcor <= paddle_b.xcor + 20) and (
-        ball.ycor < paddle_b.ycor + PADDLE_HEIGHT / 2
-    ) and (ball.ycor > paddle_b.ycor - PADDLE_HEIGHT / 2):
-        ball.setx(paddle_b.xcor - 20)
-        bounce_paddle(paddle_b, -1)
+    right_paddle_top = paddle_b.ycor + (PADDLE_HEIGHT / 2)
+    right_paddle_bottom = paddle_b.ycor - (PADDLE_HEIGHT / 2)
+    left_paddle_top = paddle_a.ycor + (PADDLE_HEIGHT / 2)
+    left_paddle_bottom = paddle_a.ycor - (PADDLE_HEIGHT / 2)
 
-    if (ball.dx < 0) and (ball.xcor <= paddle_a.xcor + 20) and (ball.xcor >= paddle_a.xcor - 20) and (
-        ball.ycor < paddle_a.ycor + PADDLE_HEIGHT / 2
-    ) and (ball.ycor > paddle_a.ycor - PADDLE_HEIGHT / 2):
-        ball.setx(paddle_a.xcor + 20)
-        bounce_paddle(paddle_a, 1)
+    if (
+        ball.dx > 0
+        and ball.xcor >= paddle_b.xcor - 20
+        and ball.xcor <= paddle_b.xcor + 22
+        and ball.ycor < right_paddle_top
+        and ball.ycor > right_paddle_bottom
+    ):
+        ball.setx(paddle_b.xcor - 22)
+        ball.bounce_off_paddle(paddle_b, -1)
+
+    if (
+        ball.dx < 0
+        and ball.xcor <= paddle_a.xcor + 20
+        and ball.xcor >= paddle_a.xcor - 22
+        and ball.ycor < left_paddle_top
+        and ball.ycor > left_paddle_bottom
+    ):
+        ball.setx(paddle_a.xcor + 22)
+        ball.bounce_off_paddle(paddle_a, 1)
+
+
+def reset_to_center():
+    ball.t.goto(0, 0)
 
 
 draw_score()
@@ -253,12 +265,7 @@ while True:
 
     if state == "playing":
         update_game()
-
-    if state == "ready":
-        ball.t.goto(0, 0)
-
-    if state == "game_over":
-        ball.t.goto(0, 0)
-
-    if state == "paused":
-        pass
+    elif state == "ready":
+        reset_to_center()
+    elif state == "game_over":
+        reset_to_center()
