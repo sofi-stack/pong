@@ -5,9 +5,10 @@ WIDTH = 800
 HEIGHT = 600
 PADDLE_HEIGHT = 110
 PADDLE_SPEED = 28
+AI_SPEED = 16
 WIN_SCORE = 5
 BALL_START_SPEED = 0.45
-MAX_BALL_SPEED = 4.5
+MAX_BALL_SPEED = 4.8
 SPEED_INCREASE = 1.12
 
 wn = turtle.Screen()
@@ -63,7 +64,7 @@ class Ball:
         self.goto_center()
         self.speed = BALL_START_SPEED
         self.dx = direction * self.speed
-        self.dy = random.uniform(-0.55, 0.55)
+        self.dy = random.uniform(-0.7, 0.7)
 
     def move(self):
         self.t.setx(self.t.xcor() + self.dx)
@@ -96,7 +97,8 @@ ball = Ball()
 
 score_a = 0
 score_b = 0
-state = "ready"
+state = "menu"
+game_mode = "single"
 
 score_pen = turtle.Turtle()
 score_pen.speed(0)
@@ -127,17 +129,65 @@ def show_status(message):
     status_pen.write(message, align="center", font=("Courier", 18, "normal"))
 
 
-def start_game():
+def reset_paddles():
+    paddle_a.t.goto(-350, 0)
+    paddle_b.t.goto(350, 0)
+
+
+def reset_round(direction=1):
+    ball.serve(direction)
+
+
+def start_round():
     global state
-    if state == "ready":
-        state = "playing"
-        status_pen.clear()
-        ball.serve(1)
-    elif state == "paused":
-        state = "playing"
-        status_pen.clear()
-    elif state == "game_over":
-        restart_game()
+    if state == "menu":
+        return
+    state = "playing"
+    ball.serve(1 if random.random() < 0.5 else -1)
+    show_status("Playing")
+
+
+def set_mode(mode):
+    global game_mode, state, score_a, score_b
+    game_mode = mode
+    score_a = 0
+    score_b = 0
+    reset_paddles()
+    draw_score()
+    state = "playing"
+    ball.serve(1 if random.random() < 0.5 else -1)
+    show_status(f"{mode} mode" if mode == "single" else "2 Player mode")
+
+
+def choose_single():
+    set_mode("single")
+
+
+def choose_duo():
+    set_mode("duo")
+
+
+def restart_game():
+    global score_a, score_b, state
+    score_a = 0
+    score_b = 0
+    draw_score()
+    reset_paddles()
+    state = "menu"
+    show_menu()
+
+
+def show_menu():
+    global state
+    state = "menu"
+    ball.goto_center()
+    show_status("Press 1 = 1 Player | Press 2 = 2 Players")
+
+
+def end_game(winner):
+    global state
+    state = "game_over"
+    show_status(f"{winner} wins! Press R to return to menu")
 
 
 def toggle_pause():
@@ -150,56 +200,54 @@ def toggle_pause():
         status_pen.clear()
 
 
-def restart_game():
-    global score_a, score_b, state
-    score_a = 0
-    score_b = 0
-    draw_score()
-    paddle_a.t.goto(-350, 0)
-    paddle_b.t.goto(350, 0)
-    state = "ready"
-    ball.serve(1)
-    show_status("Press Space to start")
-
-
-def end_game(winner):
-    global state
-    state = "game_over"
-    show_status(f"{winner} wins! Press R to restart")
-
-
 def paddle_a_up():
-    if state in ("playing", "ready", "paused"):
+    if state in ("playing", "paused"):
         paddle_a.move_up()
 
 
 def paddle_a_down():
-    if state in ("playing", "ready", "paused"):
+    if state in ("playing", "paused"):
         paddle_a.move_down()
 
 
 def paddle_b_up():
-    if state in ("playing", "ready", "paused"):
+    if state in ("playing", "paused"):
         paddle_b.move_up()
 
 
 def paddle_b_down():
-    if state in ("playing", "ready", "paused"):
+    if state in ("playing", "paused"):
         paddle_b.move_down()
 
 
+def move_ai():
+    if game_mode != "single":
+        return
+    target_y = ball.ycor
+    paddle_b_speed = AI_SPEED
+
+    if paddle_b.ycor < target_y:
+        paddle_b.move_up(amount=paddle_b_speed)
+    elif paddle_b.ycor > target_y:
+        paddle_b.move_down(amount=paddle_b_speed)
+
+
 wn.listen()
+wn.onkeypress(lambda: choose_single(), "1")
+wn.onkeypress(lambda: choose_duo(), "2")
 wn.onkeypress(paddle_a_up, "w")
 wn.onkeypress(paddle_a_down, "s")
 wn.onkeypress(paddle_b_up, "Up")
 wn.onkeypress(paddle_b_down, "Down")
-wn.onkeypress(start_game, "space")
 wn.onkeypress(toggle_pause, "p")
 wn.onkeypress(restart_game, "r")
 
 
 def update_game():
     global score_a, score_b
+
+    if game_mode == "single":
+        move_ai()
 
     ball.move()
 
@@ -252,20 +300,17 @@ def update_game():
         ball.bounce_off_paddle(paddle_a, 1)
 
 
-def reset_to_center():
-    ball.t.goto(0, 0)
-
-
 draw_score()
-show_status("Press Space to start")
-ball.serve(1)
+show_menu()
 
 while True:
     wn.update()
 
     if state == "playing":
         update_game()
-    elif state == "ready":
-        reset_to_center()
+    elif state == "menu":
+        ball.goto_center()
+    elif state == "paused":
+        pass
     elif state == "game_over":
-        reset_to_center()
+        ball.goto_center()
